@@ -1,0 +1,17 @@
+# 9P file store served by diod. install.sh fills in the @...@ values.
+# No 9P auth: the private-address bind and the firewall are the gate.
+# Every client user maps to @SQUASH_USER@.
+[Unit]
+Description=9P file store (diod)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/sbin/diod -f -n -S -U @SQUASH_USER@ -e @EXPORT_DIR@ -l @LISTEN_ADDR@:@PORT@ -l 127.0.0.1:@PORT@ --nwthreads 2 -L stderr
+Restart=on-failure
+RestartSec=5
+MemoryMax=64M
+MemoryHigh=48M
+
+[Install]
+WantedBy=multi-user.target
