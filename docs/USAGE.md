@@ -64,3 +64,30 @@ diodcat -s 127.0.0.1:564 -a /srv/9pstore file.txt
 ```
 
 Windows has no built-in 9P TCP client; use a Linux host or plan9port.
+
+### Client behind a WireGuard sidecar container
+
+A host without its own WireGuard interface can run a small container that
+holds the tunnel and forwards 9P to the host's loopback. Placeholders:
+`SERVER_WG_IP`, `CLIENT_WG_IP`, `SERVER_PUBKEY`, `SERVER_HOST`.
+
+```sh
+# entrypoint.sh (alpine + wireguard-tools-wg, iproute2-minimal, socat)
+ip link add wg0 type wireguard
+wg set wg0 private-key /keys/privatekey peer SERVER_PUBKEY \
+  endpoint SERVER_HOST:51820 allowed-ips SERVER_WG_IP/32 persistent-keepalive 25
+ip addr add CLIENT_WG_IP/32 dev wg0
+ip link set wg0 up
+ip route add SERVER_WG_IP/32 dev wg0
+exec socat TCP-LISTEN:564,fork,reuseaddr TCP:SERVER_WG_IP:564
+```
+
+```sh
+docker run -d --name wg-9p --restart unless-stopped --cap-drop ALL \
+  --cap-add NET_ADMIN --memory 32m -v "$PWD/privatekey:/keys/privatekey:ro" \
+  -p 127.0.0.1:564:564 wg-9p
+mount -t 9p -o trans=tcp,port=564,aname=/srv/9pstore,version=9p2000.L 127.0.0.1 /mnt/9pstore
+```
+
+The server needs a `[Peer]` with the container's public key and
+`AllowedIPs = CLIENT_WG_IP/32`. One sidecar can forward several services.
